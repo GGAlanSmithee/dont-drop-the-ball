@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Dexie Relationships Test</title>
+        
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        
+        <style type="text/css">
+            /* http://meyerweb.com/eric/tools/css/reset/ 
+               v2.0 | 20110126
+               License: none (public domain)
+            */
+            
+            html, body, div, span, applet, object, iframe,
+            h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+            a, abbr, acronym, address, big, cite, code,
+            del, dfn, em, img, ins, kbd, q, s, samp,
+            small, strike, strong, sub, sup, tt, var,
+            b, u, i, center,
+            dl, dt, dd, ol, ul, li,
+            fieldset, form, label, legend,
+            table, caption, tbody, tfoot, thead, tr, th, td,
+            article, aside, canvas, details, embed, 
+            figure, figcaption, footer, header, hgroup, 
+            menu, nav, output, ruby, section, summary,
+            time, mark, audio, video {
+            	margin: 0;
+            	padding: 0;
+            	border: 0;
+            	font-size: 100%;
+            	font: inherit;
+            	vertical-align: baseline;
+            }
+            /* HTML5 display-role reset for older browsers */
+            article, aside, details, figcaption, figure, 
+            footer, header, hgroup, menu, nav, section {
+            	display: block;
+            }
+            body {
+            	line-height: 1;
+            }
+            ol, ul {
+            	list-style: none;
+            }
+            blockquote, q {
+            	quotes: none;
+            }
+            blockquote:before, blockquote:after,
+            q:before, q:after {
+            	content: '';
+            	content: none;
+            }
+            table {
+            	border-collapse: collapse;
+            	border-spacing: 0;
+            }
+        </style>
+
+        <style type="text/css">
+            html, body, #app {
+                height: 100%;
+                box-sizing: border-box;
+                margin: 0;
+            }
+        </style>
+    </head>
+  
+    <body>
+        <div id='app'/>
+    </body>
+    
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <script type="text/javascript" src="node_modules/dexie-relationships/dist/index.js"></script>
+    <script>
+    
+    
+var db = new window.Dexie('DontDropTheBall', {addons: [window.dexieRelationships]})
+
+db.version(1).stores({
+    //     genres: '++id, name',
+    //     bands: '++id, name, genreId -> genres.id',
+    //     albums: '++id, name, bandId -> bands.id, year'
+    teams: '++id, isActive, name',
+    players: '++id, teamId -> teams.id, isActive, name, x, y',
+    balls: '++id, playerId -> players.id, isActive, task'
+})
+
+class Team {
+    toJSON() {
+        return {
+            id: parseInt(this.id || 0, 10),
+            isActive: parseInt(this.isActive || 0, 10) === 1 ? true : false,
+            name: this.name || ''
+        }
+    }
+}
+
+db.balls.mapToClass(Team)
+
+class Player {
+    toJSON() {
+        return {
+            id: parseInt(this.id || 0, 10),
+            isActive: parseInt(this.isActive || 0, 10) === 1 ? true : false,
+            teamId: parseInt(this.teamId || 0, 10),
+            name: this.name || '',
+            x: parseInt(this.x || 0, 10),
+            y: parseInt(this.y || 0, 10)
+        }
+    }
+}
+
+db.players.mapToClass(Player)
+
+class Ball {
+    toJSON() {
+        return {
+            id: parseInt(this.id || 0, 10),
+            isActive: parseInt(this.isActive || 0, 10) === 1 ? true : false,
+            playerId: parseInt(this.playerId || 0, 10),
+            task: this.task || ''
+        }
+    }
+}
+
+db.balls.mapToClass(Ball)
+
+// Open the database
+db.open().catch(console.error)
+
+db.transaction('rw', db.teams, db.players, db.balls, async () => {
+    // Teams
+    const teamOneId = await db.teams.put({
+        name: "Team One",
+        isActive: 1
+    })
+    
+    const teamTwoId = await db.teams.put({
+        name: "Team Two",
+        isActive: 0
+    })
+    
+    // Players
+    const playerOneId = await db.players.put({
+        isActive: 1,
+        teamId: teamOneId,
+        name: 'Player One',
+        x: 1,
+        y: 1
+    })
+    
+    const playerTwoId = await db.players.put({
+        isActive: 0,
+        teamId: teamOneId,
+        name: 'Player Two',
+        x: 2,
+        y: 2
+    })
+    
+    const playerThreeId = await db.players.put({
+        isActive: 0,
+        teamId: teamTwoId,
+        name: 'Player Three',
+        x: 3,
+        y: 3
+    })
+    
+    // Balls
+    db.balls.bulkPut([{
+        isActive: 1,
+        playerId: playerOneId,
+        task: 'Task One'
+    }, {
+        isActive: 0,
+        playerId: playerTwoId,
+        task: 'Task Two'
+    }, {
+        isActive: 0,
+        playerId: playerTwoId,
+        task: 'Task Three'
+    }, {
+        isActive: 0,
+        playerId: playerTwoId,
+        task: 'Task Four'
+    }])
+    
+    // , {
+    //     isActive: 0,
+    //     playerId: playerThreeId,
+    //     task: 'Task Five'
+    // }])
+}).then(async () => {
+    const players = await db.players
+        .with({team: 'teamId', balls: 'balls'}) // makes referred items included
+        
+    console.log(players) //players.forEach (player => player.toJSON()))
+        
+    db.balls.clear()
+    db.players.clear()
+    db.teams.clear()
+})
+
+
+// db.version(1).stores({
+//     genres: '++id, name',
+//     bands: '++id, name, genreId -> genres.id',
+//     albums: '++id, name, bandId -> bands.id, year'
+// })
+
+// db.transaction('rw', db.bands, db.albums, db.genres, () => {
+//     // Genres
+//     db.genres.bulkPut([{
+//         name: "Rock"
+//     },{
+//         name: "Schlager"
+//     }])
+
+//     // Bands
+//     db.bands.bulkPut([{
+//         name: 'Beatles',
+//         genreId: 1
+//     },{
+//         name: 'Abba',
+//         genreId: 2
+//     }])
+    
+//     // Albums
+//     db.albums.bulkPut([{
+//         name: 'Abbey Road',
+//         year: 1969,
+//         bandId: 1
+//     }, {
+//         name: 'Let It Be',
+//         year: 1970,
+//         bandId: 1
+//     }, {
+//         name: 'Super Trouper',
+//         bandId: 2,
+//         year: 1980
+//     }, {
+//         name: 'Waterloo',
+//         bandId: 2,
+//         year: 1974
+//     }])
+// })
+
+// db.bands
+//     .where('name').startsWithAnyOf('A', 'B') // can be replaced with your custom query
+//     .with({albums: 'albums', genre: 'genreId'}) // makes referred items included
+//     .then(bands => {
+//         // Let's print the result:
+//         bands.forEach (band => {
+//             console.log (`Band Id: ${band.id}`)
+//             console.log (`Band Name: ${band.name}`)
+//             console.log (`Genre: ${band.genre.name}`)
+//             console.log (`Albums: ${JSON.stringify(band.albums, null, 4)}`)
+//         })
+//     })
+
+
+
+    </script>
+</html>
